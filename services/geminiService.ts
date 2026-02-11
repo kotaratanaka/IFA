@@ -10,21 +10,33 @@ const PARSE_MODEL = "gemini-3-pro-preview";
 const DEEP_RESEARCH_AGENT = 'deep-research-pro-preview-12-2025';
 
 // Helper function to handle 429 errors with exponential backoff
-const generateWithRetry = async (params: any, retries = 3, initialDelay = 2000) => {
+const generateWithRetry = async (params: any, retries = 5, initialDelay = 5000) => {
   let delay = initialDelay;
   for (let i = 0; i < retries; i++) {
     try {
       return await ai.models.generateContent(params);
     } catch (error: any) {
-      const isQuotaError = error.status === 429 || 
-                           error.message?.includes('429') || 
-                           error.message?.toLowerCase().includes('quota');
+      // Robust error checking for various SDK/API error formats
+      const errorBody = error.response || error;
+      const errorCode = error.status || error.code || errorBody?.error?.code;
+      const errorMessage = error.message || errorBody?.error?.message || JSON.stringify(error);
+      const errorStatus = error.statusText || errorBody?.error?.status;
+
+      const isQuotaError = errorCode === 429 || 
+                           errorMessage.includes('429') || 
+                           errorMessage.toLowerCase().includes('quota') ||
+                           errorMessage.includes('RESOURCE_EXHAUSTED') ||
+                           errorStatus === 'RESOURCE_EXHAUSTED';
       
-      if (isQuotaError && i < retries - 1) {
-        console.warn(`Gemini API Quota Exceeded. Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2; // Exponential backoff
-        continue;
+      if (isQuotaError) {
+        if (i < retries - 1) {
+            console.warn(`Gemini API Quota Exceeded (Attempt ${i + 1}/${retries}). Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2; // Exponential backoff
+            continue;
+        } else {
+             console.error("Max retries reached for Gemini API Quota.");
+        }
       }
       throw error;
     }
@@ -351,6 +363,7 @@ export const parsePortfolioDocument = async (base64Data: string, mimeType: strin
         return JSON.parse(text) as ParseResult;
     } catch (error) {
         console.error("Parse Error:", error);
+        // Error is logged but empty result returned to prevent app crash
         return { assets: [] };
     }
 }

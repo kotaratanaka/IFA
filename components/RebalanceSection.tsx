@@ -8,14 +8,15 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, Pola
 interface RebalanceSectionProps {
   profile: ClientProfile;
   settings: ProposalSettings;
+  initialProposedAssets: Asset[];
   onBack: () => void;
   onGenerateReport: (proposedAssets: Asset[]) => void;
   isGenerating: boolean;
 }
 
-const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, onBack, onGenerateReport, isGenerating }) => {
+const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, initialProposedAssets, onBack, onGenerateReport, isGenerating }) => {
   const [recommendations, setRecommendations] = useState<Asset[]>([]);
-  const [proposedAssets, setProposedAssets] = useState<Asset[]>([]);
+  const [proposedAssets, setProposedAssets] = useState<Asset[]>(initialProposedAssets || []);
   const [loadingRecs, setLoadingRecs] = useState(false);
   
   // Manual Search State
@@ -35,7 +36,8 @@ const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, 
   };
 
   useEffect(() => {
-    // Auto-fetch recommendations on mount
+    // Only fetch recommendations if we don't have existing ones, or just fetch fresh ones every time.
+    // Given the user flow, fetching fresh recommendations on mount is usually desired unless explicitly cached.
     fetchRecs();
   }, []);
 
@@ -259,10 +261,7 @@ const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, 
               </div>
 
               <div className="border-t pt-4 bg-white">
-                  <div className="flex justify-between items-center mb-4 px-2">
-                      <span className="font-bold text-slate-600">合計提案額</span>
-                      <span className="font-bold text-2xl text-indigo-700 tracking-tight">{proposedAssets.reduce((sum, p) => sum + (p.amount || 0), 0).toLocaleString()} <span className="text-sm text-gray-500">JPY</span></span>
-                  </div>
+                  {/* 合計提案額表示を削除しました */}
                   <div className="flex justify-between gap-4">
                       <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 px-4 py-2 hover:bg-gray-100 rounded transition-colors"><ArrowLeft className="w-4 h-4"/> 戻る</button>
                       <button 

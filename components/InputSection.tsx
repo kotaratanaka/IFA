@@ -718,7 +718,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onNext, initialProfile, ini
                 disabled={profile.currentHoldings.length === 0} 
                 className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3.5 rounded-lg shadow-lg font-bold hover:shadow-xl hover:scale-[1.02] transform transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                <Sparkles className="w-5 h-5" /> レポート生成 (実行)
+                <Sparkles className="w-5 h-5" /> 銘柄選定 (Step 2)
             </button>
         </div>
       </div>

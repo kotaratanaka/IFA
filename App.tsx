@@ -83,6 +83,7 @@ const App: React.FC = () => {
                 <RebalanceSection 
                     profile={profile} 
                     settings={settings} 
+                    initialProposedAssets={proposedAssets}
                     onBack={() => setStep('input')}
                     onGenerateReport={handleRebalanceComplete}
                     isGenerating={isGenerating}

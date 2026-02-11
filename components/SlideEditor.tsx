@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SlideContent, PresentationData } from '../types';
 import { SlideRenderer } from './slides/SlideRenderer';
-import { Mic, Send, Lightbulb, FileText, Download, Printer } from 'lucide-react';
+import { MessageSquare, Send, Lightbulb, FileText, Download, Printer } from 'lucide-react';
 import { aiTextEdit } from '../services/geminiService';
 
 interface SlideEditorProps {
@@ -91,7 +91,7 @@ const SlideEditor: React.FC<SlideEditorProps> = ({ data, onUpdate, onExportPPT, 
                 onClick={() => setShowAiAnalysis(false)} 
                 className={`flex-1 py-3 text-sm font-bold flex justify-center items-center gap-2 ${!showAiAnalysis ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
               >
-                  <Mic className="w-4 h-4"/> 指示出し
+                  <MessageSquare className="w-4 h-4"/> 指示出し
               </button>
               <button 
                 onClick={() => setShowAiAnalysis(true)} 
