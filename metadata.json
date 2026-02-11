@@ -1,0 +1,7 @@
+{
+  "name": "IFA Portfolio Architect AI",
+  "description": "A comprehensive proposal generation system for IFAs to analyze risks, returns, and suggest portfolio rebalancing with deep fundamental analysis.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
