@@ -3,14 +3,13 @@ import { ClientProfile, ProposalSettings, PresentationData, Asset, ASSET_TYPES }
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
-// Use Gemini 3.0 Pro for Report Generation
+// Use Gemini 3.0 Pro for complex Report Generation
 const REPORT_MODEL = "gemini-3-pro-preview";
-const PARSE_MODEL = "gemini-3-pro-preview"; 
-// Deep Research Agent ID
-const DEEP_RESEARCH_AGENT = 'deep-research-pro-preview-12-2025';
+// Use Gemini 3.0 Flash for faster, lighter tasks (Recommendations, Parsing, Chat, Research)
+const FAST_MODEL = "gemini-3-flash-preview"; 
 
 // Helper function to handle 429 errors with exponential backoff
-const generateWithRetry = async (params: any, retries = 5, initialDelay = 5000) => {
+const generateWithRetry = async (params: any, retries = 3, initialDelay = 2000) => {
   let delay = initialDelay;
   for (let i = 0; i < retries; i++) {
     try {
@@ -43,89 +42,74 @@ const generateWithRetry = async (params: any, retries = 5, initialDelay = 5000) 
   }
 };
 
+// New Function: Perform Deep Research using standard Google Search Tool
+const performDeepResearch = async (profile: ClientProfile, proposedAssets: Asset[]): Promise<string> => {
+    console.log(`[Deep Research] Starting standard search research...`);
+    
+    const assetNames = proposedAssets.map(a => `${a.name} (${a.code || ''})`).join(', ');
+    
+    // Prompt specifically designed for Search Grounding
+    const researchPrompt = `
+    You are a financial research assistant. Please find the latest financial data and market trends for the following assets to prepare an investment proposal.
+    
+    Target Assets: ${assetNames}
+    
+    Required Information:
+    1. **Financial Fundamentals**: Find the latest PER (Price-to-Earnings), PBR (Price-to-Book), ROE, and Operating Margin for each company.
+    2. **Competitor Comparison**: Identify 1-2 key competitors for each target asset and find their PER/PBR for comparison.
+    3. **Market Trends**: Search for the market size (CAGR) and growth drivers for the sectors these assets belong to (e.g., Semiconductor, Automotive, Healthcare).
+    4. **Risk Factors**: Identify specific recent risks (geopolitical, regulatory, or economic) relevant to these assets.
+
+    Please summarize the findings in a structured text format.
+    `;
+
+    try {
+        const response: any = await generateWithRetry({
+            model: FAST_MODEL, // Use Flash for research to save quota and time
+            contents: researchPrompt,
+            config: {
+                tools: [{ googleSearch: {} }], // Enable Google Search
+                responseMimeType: "text/plain"
+            }
+        });
+
+        // Extract text and grounding metadata (URLs)
+        const text = response.text || "";
+        const grounding = response.candidates?.[0]?.groundingMetadata;
+        
+        let sourceLinks = "";
+        if (grounding?.groundingChunks) {
+            const urls = grounding.groundingChunks
+                .map((c: any) => c.web?.uri)
+                .filter((uri: string) => uri)
+                .slice(0, 5); // Limit to top 5 sources
+            if (urls.length > 0) {
+                sourceLinks = "\n\nReferenced Sources:\n" + urls.join("\n");
+            }
+        }
+
+        return text + sourceLinks;
+    } catch (error) {
+        console.error("[Deep Research] Error during search:", error);
+        return "Deep research could not be completed due to network or API issues. Using internal knowledge base.";
+    }
+};
+
 export const generateInvestmentProposal = async (
   profile: ClientProfile,
   proposedAssets: Asset[],
   settings: ProposalSettings
 ): Promise<PresentationData> => {
   
-  // 1. Run Deep Research Agent
-  // ------------------------------------------------------------------
-  // ディープリサーチ機能をエージェント経由で呼び出し、長時間調査を実行する
-  // ------------------------------------------------------------------
+  // 1. Run Deep Research (Standard Search)
   let deepResearchReport = "";
-  
   try {
-    console.log(`[Deep Research] Starting agent: ${DEEP_RESEARCH_AGENT}...`);
-    
-    // Construct research input
-    const researchInput = `
-      Please conduct a deep research for an investment proposal report.
-      
-      Target Assets for Analysis:
-      ${proposedAssets.map(a => `- ${a.name} (${a.code || 'N/A'})`).join('\n')}
-      
-      Client Profile:
-      - Risk Tolerance: ${profile.riskTolerance}
-      - Investment Goals: ${profile.goals}
-      
-      Research Requirements:
-      1. Latest Financial Fundamentals: Find PER, PBR, ROE, Operating Margin, and Revenue Growth for the target assets.
-      2. Competitor Analysis: Identify 2-3 key competitors for each target asset and compare their valuation metrics (Comps Analysis).
-      3. Market Trends: Research the market size (CAGR) and growth drivers for the sectors these assets belong to.
-      4. Risks: Identify specific geopolitical or economic risks relevant to these assets.
-    `;
-
-    // Access the interactions API (casting to any as it might be experimental in some SDK versions)
-    const interactionsClient = (ai as any).interactions;
-
-    if (interactionsClient) {
-        // Start the interaction
-        // Reference Python code: interaction = client.interactions.create(input="...", agent='...', background=True)
-        let interaction = await interactionsClient.create({
-            agent: DEEP_RESEARCH_AGENT,
-            input: researchInput,
-            background: true // Allow long-running background process
-        });
-
-        console.log(`[Deep Research] Interaction Started: ${interaction.name}`);
-
-        // Polling loop to wait for completion
-        // Reference Python code: while True: ...
-        while (true) {
-            await new Promise(resolve => setTimeout(resolve, 10000)); // Check every 10 seconds
-
-            interaction = await interactionsClient.get({ name: interaction.name });
-            const status = interaction.status?.toLowerCase() || interaction.state?.toLowerCase();
-
-            console.log(`[Deep Research] Status: ${status}`);
-
-            if (status === 'completed' || status === 'succeeded') {
-                // Extract the final output text
-                if (interaction.outputs && interaction.outputs.length > 0) {
-                    deepResearchReport = interaction.outputs[interaction.outputs.length - 1].text;
-                    console.log("[Deep Research] Completed successfully.");
-                }
-                break;
-            } else if (status === 'failed' || status === 'error') {
-                console.error("[Deep Research] Failed:", interaction.error);
-                break;
-            }
-        }
-    } else {
-        console.warn("[Deep Research] Interactions API not available, skipping deep research.");
-    }
-
-  } catch (error) {
-    console.error("[Deep Research] Error executing agent:", error);
-    // Continue to standard generation even if research fails
+      deepResearchReport = await performDeepResearch(profile, proposedAssets);
+  } catch (e) {
+      console.warn("Skipping deep research due to error", e);
   }
 
   // 2. Generate Slides using Research Data
-  // ------------------------------------------------------------------
-  // 調査結果(deepResearchReport)をコンテキストとして渡し、スライドJSONを生成
-  // ------------------------------------------------------------------
-
   const systemInstruction = `
     あなたは、超富裕層向けプライベートバンクに所属するトップTierのIFA（資産アドバイザー）です。
     提供された「Deep Research Report」の情報を最大限に活用し、論理的かつ数値的根拠に基づいた資産運用提案書を作成してください。
@@ -241,11 +225,13 @@ export const generateInvestmentProposal = async (
 
   try {
     const response: any = await generateWithRetry({
-      model: REPORT_MODEL,
+      model: REPORT_MODEL, // Keep Pro for high quality report
       contents: prompt,
       config: {
-        // Still keep googleSearch as a tool for the slide generator as backup/supplement
-        tools: [{googleSearch: {}}], 
+        // tools: [{googleSearch: {}}], // Search is already done in step 1. Disable here to save tokens/latency if context is passed.
+        // Actually, keeping search enabled here can help if the summary missed something, but it adds latency.
+        // Let's rely on the deepResearchReport context and disable search here for speed, 
+        // OR enable it as a fallback. Let's disable to reduce complexity and quota usage since we passed the context.
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
@@ -297,20 +283,21 @@ export const getAssetRecommendations = async (
 
     try {
         const response: any = await generateWithRetry({
-            model: REPORT_MODEL,
+            model: FAST_MODEL, // Use Flash for faster/cheaper recommendations
             contents: prompt,
             config: { responseMimeType: "application/json" }
         });
         return JSON.parse(response.text || "[]");
     } catch (e) {
-        return [];
+        console.error("Recommendation Error:", e);
+        throw e; // Propagate error so UI can show retry button
     }
 }
 
 export const aiTextEdit = async (currentText: string, instruction: string): Promise<string> => {
     const prompt = `オリジナル: "${currentText}"\n指示: ${instruction}\n書き直した日本語テキストのみを返してください。`;
     try {
-        const response: any = await generateWithRetry({ model: REPORT_MODEL, contents: prompt });
+        const response: any = await generateWithRetry({ model: FAST_MODEL, contents: prompt }); // Use Flash for chat
         return response.text || currentText;
     } catch (e) { return currentText; }
 }
@@ -337,7 +324,7 @@ export const parsePortfolioDocument = async (base64Data: string, mimeType: strin
 
     try {
         const response: any = await generateWithRetry({
-            model: PARSE_MODEL,
+            model: FAST_MODEL, // Use Flash for parsing (multimodal supported and cheaper)
             contents: {
                 parts: [
                     { inlineData: { mimeType: mimeType, data: base64Data } },

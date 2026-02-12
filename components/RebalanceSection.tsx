@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ClientProfile, Asset, ProposalSettings, ASSET_TYPES } from '../types';
 import { getAssetRecommendations } from '../services/geminiService';
-import { Sparkles, ArrowRight, Plus, Trash2, Loader2, ArrowLeft, Search, RotateCcw } from 'lucide-react';
+import { Sparkles, ArrowRight, Plus, Trash2, Loader2, ArrowLeft, Search, RotateCcw, AlertTriangle } from 'lucide-react';
 import { POPULAR_ASSETS, StockDefinition } from '../utils/assetList';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, PolarRadiusAxis } from 'recharts';
 
@@ -18,6 +18,7 @@ const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, 
   const [recommendations, setRecommendations] = useState<Asset[]>([]);
   const [proposedAssets, setProposedAssets] = useState<Asset[]>(initialProposedAssets || []);
   const [loadingRecs, setLoadingRecs] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Manual Search State
   const [manualQuery, setManualQuery] = useState('');
@@ -28,11 +29,18 @@ const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, 
 
   const fetchRecs = async () => {
     setLoadingRecs(true);
-    // Passing a timestamp implies a fresh request logic in the service if needed, 
-    // or simply re-calling the API allows the LLM to generate variations.
-    const recs = await getAssetRecommendations(profile, settings);
-    setRecommendations(recs.map(r => ({ ...r, id: `rec-${Math.random()}` })));
-    setLoadingRecs(false);
+    setError(null);
+    try {
+        // Passing a timestamp implies a fresh request logic in the service if needed, 
+        // or simply re-calling the API allows the LLM to generate variations.
+        const recs = await getAssetRecommendations(profile, settings);
+        setRecommendations(recs.map(r => ({ ...r, id: `rec-${Math.random()}` })));
+    } catch (e) {
+        console.error(e);
+        setError("AI推奨の取得に失敗しました。しばらく待ってから再試行してください。");
+    } finally {
+        setLoadingRecs(false);
+    }
   };
 
   useEffect(() => {
@@ -135,7 +143,20 @@ const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, 
              </div>
              
              <div className="space-y-4">
-                 {recommendations.map(rec => (
+                 {error && (
+                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
+                         <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2"/>
+                         <p className="text-sm text-red-700 font-bold mb-2">{error}</p>
+                         <button 
+                            onClick={fetchRecs}
+                            className="text-xs bg-white border border-red-300 text-red-700 px-3 py-1 rounded hover:bg-red-50"
+                         >
+                             再試行する
+                         </button>
+                     </div>
+                 )}
+
+                 {!error && recommendations.map(rec => (
                      <div key={rec.id} className="bg-white p-4 rounded-lg shadow-sm border border-indigo-100 hover:shadow-md transition-shadow">
                          <div className="flex justify-between items-start mb-2">
                              <div>
@@ -171,7 +192,7 @@ const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, 
                          <div className="mt-2 text-right font-mono text-sm font-bold text-slate-600">参考価格: {(rec.currentPrice || 0).toLocaleString()} {rec.currency}</div>
                      </div>
                  ))}
-                 {!loadingRecs && recommendations.length === 0 && <div className="text-center text-slate-400 mt-10">条件に合う候補が見つかりませんでした</div>}
+                 {!loadingRecs && !error && recommendations.length === 0 && <div className="text-center text-slate-400 mt-10">条件に合う候補が見つかりませんでした</div>}
              </div>
           </div>
 
@@ -261,7 +282,6 @@ const RebalanceSection: React.FC<RebalanceSectionProps> = ({ profile, settings, 
               </div>
 
               <div className="border-t pt-4 bg-white">
-                  {/* 合計提案額表示を削除しました */}
                   <div className="flex justify-between gap-4">
                       <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 px-4 py-2 hover:bg-gray-100 rounded transition-colors"><ArrowLeft className="w-4 h-4"/> 戻る</button>
                       <button 
